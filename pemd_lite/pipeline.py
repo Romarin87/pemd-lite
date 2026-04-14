@@ -50,7 +50,7 @@ class Pipeline:
         from .relax import BoxEstimator, RelaxRunner
         from .pack import PackBuilder
 
-        result.relax = RelaxRunner(self.project).run(result.polymer.long_pdb)
+        result.relax = RelaxRunner(self.project).run(result.forcefield.polymer_gro)
         if stage == "relax_chain":
             return result
 
@@ -60,7 +60,10 @@ class Pipeline:
             scale=self.project.run.add_length_scale,
             min_add_a=self.project.run.add_length_min_a,
         )
-        result.pack = PackBuilder(self.project).run(add_length_a=result.box.add_length_a)
+        result.pack = PackBuilder(self.project).run(
+            add_length_a=result.box.add_length_a,
+            polymer_pdb=result.relax.relaxed_pdb,
+        )
         if stage == "pack_cell":
             return result
 

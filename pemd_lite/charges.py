@@ -100,6 +100,50 @@ def _find_generated_file(search_dirs: List[Path], stems: List[str], ext: str) ->
     return None
 
 
+def _find_new_or_updated_file(
+    search_dirs: List[Path],
+    stems: List[str],
+    ext: str,
+    snapshot: Dict[Path, Tuple[int, int]],
+) -> Optional[Path]:
+    suffixes = [f".gmx.{ext}", f".{ext}"]
+    for base in search_dirs:
+        for stem in stems:
+            for suffix in suffixes:
+                candidate = base / f"{stem}{suffix}"
+                if _is_new_or_updated(candidate, snapshot):
+                    return candidate
+    return None
+
+
+def _file_stamp(path: Path) -> Optional[Tuple[int, int]]:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def _snapshot_generated_files(search_dirs: List[Path], stems: List[str]) -> Dict[Path, Tuple[int, int]]:
+    snapshot: Dict[Path, Tuple[int, int]] = {}
+    for ext in ("itp", "gro", "csv"):
+        for base in search_dirs:
+            for stem in stems:
+                for suffix in (f".gmx.{ext}", f".{ext}"):
+                    path = base / f"{stem}{suffix}"
+                    stamp = _file_stamp(path)
+                    if stamp is not None:
+                        snapshot[path] = stamp
+    return snapshot
+
+
+def _is_new_or_updated(path: Path, snapshot: Dict[Path, Tuple[int, int]]) -> bool:
+    stamp = _file_stamp(path)
+    if stamp is None:
+        return False
+    return snapshot.get(path) != stamp
+
+
 class LigParGenBackend(ChargeBackend):
     def __init__(self, charge_model: str = "CM1A-LBCC"):
         self.charge_model = charge_model
@@ -201,7 +245,8 @@ class LigParGenBackend(ChargeBackend):
         gmx_itp: Path,
         gmx_gro: Path,
         csv_path: Path,
-    ) -> Tuple[Path, Path, Optional[Path]]:
+        snapshot: Dict[Path, Tuple[int, int]],
+    ) -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
         stems: List[str] = []
         for stem in (name, resname):
             if stem and stem not in stems:
@@ -211,38 +256,41 @@ class LigParGenBackend(ChargeBackend):
         found_itp = _find_generated_file(search_dirs, stems, "itp")
         found_gro = _find_generated_file(search_dirs, stems, "gro")
         found_csv = _find_generated_file(search_dirs, stems, "csv")
+        changed_itp = _find_new_or_updated_file(search_dirs, stems, "itp", snapshot)
+        changed_gro = _find_new_or_updated_file(search_dirs, stems, "gro", snapshot)
+        changed_csv = _find_new_or_updated_file(search_dirs, stems, "csv", snapshot)
 
         logger.info(
-            "Collecting LigParGen outputs: stems=%s search_dirs=%s found_itp=%s found_gro=%s found_csv=%s",
+            "Collecting LigParGen outputs: stems=%s search_dirs=%s found_itp=%s found_gro=%s found_csv=%s changed_itp=%s changed_gro=%s changed_csv=%s",
             stems,
             [str(path) for path in search_dirs],
             found_itp,
             found_gro,
             found_csv,
+            changed_itp,
+            changed_gro,
+            changed_csv,
         )
 
-        if found_itp and found_itp.resolve() != gmx_itp.resolve():
+        if changed_itp and changed_itp.resolve() != gmx_itp.resolve():
             gmx_itp.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(found_itp, gmx_itp)
-            logger.warning("LigParGen ITP collected via fallback copy: %s -> %s", found_itp, gmx_itp)
-        elif found_itp:
-            gmx_itp = found_itp
+            shutil.copy2(changed_itp, gmx_itp)
+            logger.warning("LigParGen ITP collected via fallback copy: %s -> %s", changed_itp, gmx_itp)
+            changed_itp = gmx_itp
 
-        if found_gro and found_gro.resolve() != gmx_gro.resolve():
+        if changed_gro and changed_gro.resolve() != gmx_gro.resolve():
             gmx_gro.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(found_gro, gmx_gro)
-            logger.warning("LigParGen GRO collected via fallback copy: %s -> %s", found_gro, gmx_gro)
-        elif found_gro:
-            gmx_gro = found_gro
+            shutil.copy2(changed_gro, gmx_gro)
+            logger.warning("LigParGen GRO collected via fallback copy: %s -> %s", changed_gro, gmx_gro)
+            changed_gro = gmx_gro
 
-        if found_csv and found_csv.resolve() != csv_path.resolve():
+        if changed_csv and changed_csv.resolve() != csv_path.resolve():
             csv_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(found_csv, csv_path)
-            logger.warning("LigParGen CSV collected via fallback copy: %s -> %s", found_csv, csv_path)
-        elif found_csv:
-            csv_path = found_csv
+            shutil.copy2(changed_csv, csv_path)
+            logger.warning("LigParGen CSV collected via fallback copy: %s -> %s", changed_csv, csv_path)
+            changed_csv = csv_path
 
-        return gmx_itp, gmx_gro, csv_path if csv_path.exists() else None
+        return changed_itp, changed_gro, changed_csv
 
     def generate_polymer_charges(
         self,
@@ -262,6 +310,8 @@ class LigParGenBackend(ChargeBackend):
         input_mode = "pdb"
         for mode, payload in attempts:
             logger.info("LigParGen attempt starting: name=%s mode=%s", poly.name, mode)
+            search_dirs = [ligdir, Path.cwd(), Path("/tmp")]
+            snapshot = _snapshot_generated_files(search_dirs, [poly.name, self._run_resname(name=poly.name, resname=poly.resname)])
             input_mode, run_resname, result = self._run_ligpargen(
                 ligdir,
                 name=poly.name,
@@ -270,17 +320,22 @@ class LigParGenBackend(ChargeBackend):
                 mode=mode,
                 payload=payload,
             )
-            gmx_itp, gmx_gro, found_csv = self._collect_outputs(
+            found_itp, found_gro, found_csv = self._collect_outputs(
                 ligdir=ligdir,
                 name=poly.name,
                 resname=run_resname,
                 gmx_itp=gmx_itp,
                 gmx_gro=gmx_gro,
                 csv_path=csv_path,
+                snapshot=snapshot,
             )
+            if found_itp is not None:
+                gmx_itp = found_itp
+            if found_gro is not None:
+                gmx_gro = found_gro
             if found_csv is not None:
                 csv_path = found_csv
-            if gmx_itp.exists() and gmx_gro.exists():
+            if found_itp is not None and found_gro is not None:
                 if mode == "smiles":
                     logger.warning("LigParGen fallback succeeded with SMILES input for %s", poly.name)
                 else:

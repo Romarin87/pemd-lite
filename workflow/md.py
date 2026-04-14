@@ -219,7 +219,10 @@ if RUN_PACK_CELL:
     original_density = project.run.density
     try:
         project.run.density = PACK_DENSITY
-        pack = PackBuilder(project).run(add_length_a=box.add_length_a)
+        pack = PackBuilder(project).run(
+            add_length_a=box.add_length_a,
+            polymer_pdb=box_source_pdb,
+        )
     finally:
         project.run.density = original_density
     logger.info("Pack section completed.")

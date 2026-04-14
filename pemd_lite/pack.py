@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 import shutil
+from typing import Optional
 
 from .packmol import PEMDPackmol
 
@@ -22,19 +23,18 @@ class PackBuilder:
     def __init__(self, project: Project):
         self.project = project
 
-    def _stage_packmol_inputs(self, artifacts) -> None:
-        polymer_src = artifacts.relaxed_pdb
+    def _stage_packmol_inputs(self, artifacts, polymer_src: Path) -> None:
         polymer_dst = artifacts.md_dir / f"{self.project.polymer.name}.pdb"
         if not polymer_src.exists():
-            raise FileNotFoundError(f"Relaxed polymer PDB not found for packmol: {polymer_src}")
+            raise FileNotFoundError(f"Polymer PDB not found for packmol: {polymer_src}")
         if polymer_src.resolve() != polymer_dst.resolve():
             shutil.copyfile(polymer_src, polymer_dst)
             logger.info("Staged polymer packmol input: %s -> %s", polymer_src, polymer_dst)
 
-    def run(self, *, add_length_a: float) -> PackResult:
+    def run(self, *, add_length_a: float, polymer_pdb: Optional[Path] = None) -> PackResult:
         artifacts = self.project.artifacts
         artifacts.md_dir.mkdir(parents=True, exist_ok=True)
-        self._stage_packmol_inputs(artifacts)
+        self._stage_packmol_inputs(artifacts, polymer_pdb or artifacts.relaxed_pdb)
         molecules = {self.project.polymer.name: self.project.polymer.numbers}
         for spec in self.project.molecule_specs():
             if spec.numbers > 0:

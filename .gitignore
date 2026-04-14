@@ -22,6 +22,7 @@ Thumbs.db
 .idea/
 .vscode/
 docs/development-notes.md
+docs/remote-testing-playbook.md
 
 *.log
 *.out
