@@ -11,6 +11,7 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from rdkit import Chem
@@ -49,10 +50,10 @@ class ChargeBackend(ABC):
         raise NotImplementedError
 
 
-def _parse_atoms_from_itp(itp_path: Path) -> list[dict[str, object]]:
+def _parse_atoms_from_itp(itp_path: Path) -> List[Dict[str, object]]:
     lines = itp_path.read_text(encoding="utf-8").splitlines()
     in_atoms = False
-    rows: list[dict[str, object]] = []
+    rows: List[Dict[str, object]] = []
     for raw in lines:
         line = raw.strip()
         if not line or line.startswith(";"):
@@ -88,7 +89,7 @@ def reconstruct_csv_from_itp(itp_path: Path, csv_path: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _find_generated_file(search_dirs: list[Path], stems: list[str], ext: str) -> Path | None:
+def _find_generated_file(search_dirs: List[Path], stems: List[str], ext: str) -> Optional[Path]:
     suffixes = [f".gmx.{ext}", f".{ext}"]
     for base in search_dirs:
         for stem in stems:
@@ -103,7 +104,7 @@ class LigParGenBackend(ChargeBackend):
     def __init__(self, charge_model: str = "CM1A-LBCC"):
         self.charge_model = charge_model
 
-    def _ligpargen_base_cmd(self) -> list[str]:
+    def _ligpargen_base_cmd(self) -> List[str]:
         explicit = os.environ.get("PEMD_LIGPARGEN_EXEC", "").strip()
         if explicit:
             return [explicit]
@@ -131,7 +132,7 @@ class LigParGenBackend(ChargeBackend):
         logger.info("Using unique LigParGen resname fallback: input=%s mapped=%s", resname, mapped)
         return mapped
 
-    def _run(self, cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    def _run(self, cmd: List[str], cwd: Path) -> subprocess.CompletedProcess:
         env = os.environ.copy()
         env_bin = str(Path(sys.executable).resolve().parent)
         path_parts = [env_bin]
@@ -155,7 +156,7 @@ class LigParGenBackend(ChargeBackend):
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def _output_paths(self, ligdir: Path, name: str) -> tuple[Path, Path, Path]:
+    def _output_paths(self, ligdir: Path, name: str) -> Tuple[Path, Path, Path]:
         return (
             ligdir / f"{name}.gmx.itp",
             ligdir / f"{name}.gmx.gro",
@@ -169,7 +170,7 @@ class LigParGenBackend(ChargeBackend):
         io.convert_gro_to_pdb(gmx_gro, target)
         return target
 
-    def _run_ligpargen(self, ligdir: Path, *, name: str, resname: str, charge: float, mode: str, payload: str) -> tuple[str, str, subprocess.CompletedProcess[str]]:
+    def _run_ligpargen(self, ligdir: Path, *, name: str, resname: str, charge: float, mode: str, payload: str) -> Tuple[str, str, subprocess.CompletedProcess]:
         run_resname = self._run_resname(name=name, resname=resname)
         cmd = self._ligpargen_base_cmd() + [
             "-n",
@@ -200,8 +201,8 @@ class LigParGenBackend(ChargeBackend):
         gmx_itp: Path,
         gmx_gro: Path,
         csv_path: Path,
-    ) -> tuple[Path, Path, Path | None]:
-        stems: list[str] = []
+    ) -> Tuple[Path, Path, Optional[Path]]:
+        stems: List[str] = []
         for stem in (name, resname):
             if stem and stem not in stems:
                 stems.append(stem)
@@ -257,7 +258,7 @@ class LigParGenBackend(ChargeBackend):
         ordered_pdb = ligdir / f"{poly.name}_gmx_ordered.pdb"
 
         attempts = [("pdb", str(short_pdb.resolve())), ("smiles", short_smiles)]
-        failures: list[str] = []
+        failures: List[str] = []
         input_mode = "pdb"
         for mode, payload in attempts:
             logger.info("LigParGen attempt starting: name=%s mode=%s", poly.name, mode)

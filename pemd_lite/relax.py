@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 import re
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from rdkit import Chem
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class RelaxOptions:
     temperature: float = 1000.0
     pressure: float = 1.0
-    box_mode: float | str | None = "editconf"
+    box_mode: Optional[Union[float, str]] = "editconf"
     dt_ps: float = 0.001
     tau_t_ps: float = 1.0
     tau_p_ps: float = 1.0
@@ -35,7 +36,7 @@ class RelaxOptions:
 @dataclass
 class RelaxResult:
     relaxed_pdb: Path
-    completed_stages: list[str]
+    completed_stages: List[str]
 
 
 @dataclass
@@ -97,7 +98,7 @@ class RelaxRunner:
         return gmx
 
     @staticmethod
-    def _resolve_box_mode(opts: RelaxOptions) -> tuple[float | None, bool, float | None]:
+    def _resolve_box_mode(opts: RelaxOptions) -> Tuple[Optional[float], bool, Optional[float]]:
         mode = opts.box_mode
         if isinstance(mode, (int, float)):
             return float(mode), False, None
@@ -118,7 +119,7 @@ class RelaxRunner:
                 ) from exc
         return None, True, 1.2
 
-    def run(self, pdb_file: Path, options: RelaxOptions | None = None) -> RelaxResult:
+    def run(self, pdb_file: Path, options: Optional[RelaxOptions] = None) -> RelaxResult:
         opts = options or RelaxOptions(temperature=self.project.run.relax_temperature)
         gmx = self._prepare_gmx()
         box_length_nm, center_molecule, box_distance_nm = self._resolve_box_mode(opts)
@@ -147,7 +148,7 @@ class RelaxRunner:
             distance=box_distance_nm if center_molecule else None,
             output_gro=conf_name,
         ).run_local()
-        completed: list[str] = ["pdb_to_gro"]
+        completed: List[str] = ["pdb_to_gro"]
         current_gro = conf_name
 
         if opts.run_em:

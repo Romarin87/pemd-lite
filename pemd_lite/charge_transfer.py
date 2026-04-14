@@ -5,6 +5,7 @@ import shutil
 import logging
 from collections import defaultdict
 from pathlib import Path
+from typing import Union
 
 import pandas as pd
 from rdkit import Chem
@@ -24,7 +25,7 @@ def _forcefield_resource_root() -> Path:
     raise FileNotFoundError(f"Could not locate forcefield resource directory: {local_root}")
 
 
-def gen_ff_from_data(work_dir: str | os.PathLike[str], compound_name: str, corr_factor: float, target_sum_chg: float):
+def gen_ff_from_data(work_dir: Union[str, os.PathLike], compound_name: str, corr_factor: float, target_sum_chg: float):
     work_path = Path(work_dir)
     md_dir = work_path / "MD_dir"
     md_dir.mkdir(parents=True, exist_ok=True)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
+from typing import List, Optional
 
 from rdkit import Chem
 
@@ -12,15 +13,15 @@ def gen_copolymer_3D(
     smiles_A,
     smiles_B,
     *,
-    name: str | None = None,
-    mode: str | None = None,
-    length: int | None = None,
+    name: Optional[str] = None,
+    mode: Optional[str] = None,
+    length: Optional[int] = None,
     frac_A: float = 0.5,
-    block_sizes: list[int] | None = None,
-    sequence: list[str] | None = None,
+    block_sizes: Optional[List[int]] = None,
+    sequence: Optional[List[str]] = None,
     optimize_every_n_steps: int = 1,
-    left_cap_smiles: str | None = None,
-    right_cap_smiles: str | None = None,
+    left_cap_smiles: Optional[str] = None,
+    right_cap_smiles: Optional[str] = None,
 ):
     if sequence is None:
         if mode == "homopolymer":

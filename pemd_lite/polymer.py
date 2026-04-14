@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 from pathlib import Path
+from typing import Optional, Tuple
 
 from rdkit import Chem
 
@@ -30,7 +31,7 @@ class PolymerBuildResult:
 
 
 class PolymerBuilder:
-    def __init__(self, project: Project, options: PolymerBuildOptions | None = None):
+    def __init__(self, project: Project, options: Optional[PolymerBuildOptions] = None):
         self.project = project
         self.options = options or PolymerBuildOptions(
             optimize_every_n_steps=project.polymer.optimize_every_n_steps,
@@ -38,13 +39,13 @@ class PolymerBuilder:
             force_rebuild_long_chain=project.run.force_rebuild_long_chain,
         )
 
-    def _load_existing(self, path: Path) -> Chem.Mol | None:
+    def _load_existing(self, path: Path) -> Optional[Chem.Mol]:
         if not path.exists():
             return None
         logger.info("Reusing existing polymer chain PDB: %s", path)
         return Chem.MolFromPDBFile(str(path), removeHs=False)
 
-    def _build_chain(self, length: int) -> tuple[Chem.Mol, Path]:
+    def _build_chain(self, length: int) -> Tuple[Chem.Mol, Path]:
         poly = self.project.polymer
         logger.info("Building polymer chain: name=%s length=%s optimize_every_n_steps=%s", poly.name, length, self.options.optimize_every_n_steps)
         mol = gen_copolymer_3D(

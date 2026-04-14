@@ -23,6 +23,7 @@ from scipy.spatial import cKDTree
 from rdkit.Chem import Descriptors
 from rdkit.Geometry import Point3D
 from collections import defaultdict
+from typing import Optional, Set
 from openbabel import openbabel as ob
 from scipy.spatial.transform import Rotation as R
 
@@ -223,7 +224,7 @@ def _vdw_radius(Z: int) -> float:
     }
     return table.get(Z, 1.8)
 
-def _polymer_kdtree(mol: Chem.Mol, exclude_idx: set[int] | None = None, skip_h: bool = True):
+def _polymer_kdtree(mol: Chem.Mol, exclude_idx: Optional[Set[int]] = None, skip_h: bool = True):
     conf = mol.GetConformer()
     pts, zs = [], []
     for i in range(mol.GetNumAtoms()):

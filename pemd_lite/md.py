@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
+from typing import Dict, List, Optional
 from typing_extensions import Literal
 
 from .gromacs import PEMDGROMACS
@@ -18,11 +19,11 @@ MDStageName = Literal["pdb_to_gro", "em", "nvt", "npt", "production"]
 class MDStep:
     stage: MDStageName
     output: str
-    input_gro: str | None = None
-    input_pdb: str | None = None
-    steps: int | None = None
-    temperature: float | None = None
-    pressure: float | None = None
+    input_gro: Optional[str] = None
+    input_pdb: Optional[str] = None
+    steps: Optional[int] = None
+    temperature: Optional[float] = None
+    pressure: Optional[float] = None
 
 
 @dataclass
@@ -35,17 +36,17 @@ class StepResult:
 @dataclass
 class GromacsResult:
     work_dir: Path
-    completed_stages: list[str]
-    step_results: list[StepResult] = field(default_factory=list)
+    completed_stages: List[str]
+    step_results: List[StepResult] = field(default_factory=list)
 
 
 class MDFlow:
     def __init__(self, runner: GromacsRunner, initial_pdb: str):
         self.runner = runner
         self.initial_pdb = initial_pdb
-        self.steps: list[MDStep] = []
+        self.steps: List[MDStep] = []
 
-    def pdb_to_gro(self, input_pdb: str | None = None) -> MDFlow:
+    def pdb_to_gro(self, input_pdb: Optional[str] = None) -> MDFlow:
         self.steps.append(
             MDStep(
                 stage="pdb_to_gro",
@@ -55,17 +56,17 @@ class MDFlow:
         )
         return self
 
-    def em(self, *, input_gro: str | None = None, output: str = "em") -> MDFlow:
+    def em(self, *, input_gro: Optional[str] = None, output: str = "em") -> MDFlow:
         self.steps.append(MDStep(stage="em", input_gro=input_gro, output=output))
         return self
 
     def nvt(
         self,
         *,
-        input_gro: str | None = None,
+        input_gro: Optional[str] = None,
         output: str = "nvt",
-        steps: int | None = None,
-        temperature: float | None = None,
+        steps: Optional[int] = None,
+        temperature: Optional[float] = None,
     ) -> MDFlow:
         self.steps.append(
             MDStep(
@@ -81,11 +82,11 @@ class MDFlow:
     def npt(
         self,
         *,
-        input_gro: str | None = None,
+        input_gro: Optional[str] = None,
         output: str = "npt",
-        steps: int | None = None,
-        temperature: float | None = None,
-        pressure: float | None = None,
+        steps: Optional[int] = None,
+        temperature: Optional[float] = None,
+        pressure: Optional[float] = None,
     ) -> MDFlow:
         self.steps.append(
             MDStep(
@@ -102,10 +103,10 @@ class MDFlow:
     def production(
         self,
         *,
-        input_gro: str | None = None,
+        input_gro: Optional[str] = None,
         output: str = "production",
-        steps: int | None = None,
-        temperature: float | None = None,
+        steps: Optional[int] = None,
+        temperature: Optional[float] = None,
     ) -> MDFlow:
         self.steps.append(
             MDStep(
@@ -126,7 +127,7 @@ class GromacsRunner:
     def __init__(self, project: Project):
         self.project = project
 
-    def _molecules(self) -> list[dict[str, object]]:
+    def _molecules(self) -> List[Dict[str, object]]:
         molecules = [
             {
                 "name": self.project.polymer.name,
@@ -149,10 +150,10 @@ class GromacsRunner:
         gmx.gen_top_file(top_filename=self.project.artifacts.topology.name)
         return gmx
 
-    def build_flow(self, packmol_pdb: str | None = None) -> MDFlow:
+    def build_flow(self, packmol_pdb: Optional[str] = None) -> MDFlow:
         return MDFlow(self, initial_pdb=packmol_pdb or self.project.artifacts.pack_pdb.name)
 
-    def build_default_flow(self, packmol_pdb: str | None = None) -> MDFlow:
+    def build_default_flow(self, packmol_pdb: Optional[str] = None) -> MDFlow:
         initial_pdb = packmol_pdb or self.project.artifacts.pack_pdb.name
         flow = self.build_flow(initial_pdb)
         flow.pdb_to_gro(initial_pdb)
@@ -179,7 +180,7 @@ class GromacsRunner:
             )
         return flow
 
-    def _infer_input(self, step: MDStep, previous_output: str | None) -> str:
+    def _infer_input(self, step: MDStep, previous_output: Optional[str]) -> str:
         if step.stage == "pdb_to_gro":
             return step.input_pdb or self.project.artifacts.pack_pdb.name
         if step.input_gro is not None:
@@ -190,9 +191,9 @@ class GromacsRunner:
 
     def run_flow(self, flow: MDFlow) -> GromacsResult:
         gmx = self.prepare_topology()
-        completed: list[str] = []
-        step_results: list[StepResult] = []
-        previous_output: str | None = None
+        completed: List[str] = []
+        step_results: List[StepResult] = []
+        previous_output: Optional[str] = None
         logger.info("Starting box MD flow with %s steps", len(flow.steps))
 
         for step in flow.steps:
@@ -263,5 +264,5 @@ class GromacsRunner:
             step_results=step_results,
         )
 
-    def run_pack_md(self, packmol_pdb: str | None = None) -> GromacsResult:
+    def run_pack_md(self, packmol_pdb: Optional[str] = None) -> GromacsResult:
         return self.build_default_flow(packmol_pdb).run()

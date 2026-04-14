@@ -5,6 +5,7 @@ import shlex
 import subprocess
 import logging
 from shutil import which
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ class PEMDGROMACS:
         self,
         nsteps_nvt=200000,
         filename="nvt.mdp",
-        temperature: float | None = None,
+        temperature: Optional[float] = None,
         dt_ps: float = 0.001,
         tau_t_ps: float = 1.0,
     ):
@@ -161,8 +162,8 @@ class PEMDGROMACS:
         self,
         nsteps_npt=5000000,
         filename="npt.mdp",
-        pression: float | None = None,
-        temperature: float | None = None,
+        pression: Optional[float] = None,
+        temperature: Optional[float] = None,
         dt_ps: float = 0.001,
         tau_t_ps: float = 1.0,
         tau_p_ps: float = 1.0,
@@ -188,7 +189,7 @@ class PEMDGROMACS:
         with open(filepath, "w", encoding="utf-8") as handle:
             handle.write(contents)
 
-    def commands_pdbtogro(self, packmol_pdb, *, box_length: float | None = None, center: bool = False, distance: float | None = None, output_gro="conf.gro"):
+    def commands_pdbtogro(self, packmol_pdb, *, box_length: Optional[float] = None, center: bool = False, distance: Optional[float] = None, output_gro="conf.gro"):
         input_path = self._resolve_path(packmol_pdb)
         output_path = self._resolve_path(output_gro)
         if center and distance is not None:

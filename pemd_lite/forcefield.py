@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 from pathlib import Path
+from typing import Optional, Tuple
 
 import parmed as pmd
 from foyer import Forcefield as FoyerForcefield
@@ -37,8 +38,8 @@ class ForcefieldGenerator:
     def __init__(
         self,
         project: Project,
-        charge_backend: ChargeBackend | None = None,
-        charge_policy: ChargeTransferPolicy | None = None,
+        charge_backend: Optional[ChargeBackend] = None,
+        charge_policy: Optional[ChargeTransferPolicy] = None,
     ):
         self.project = project
         self.charge_backend = charge_backend or LigParGenBackend()
@@ -61,7 +62,7 @@ class ForcefieldGenerator:
             return MissingBondParameterError(message)
         return TopologyMismatchError(message)
 
-    def _parameterize_long_chain(self, xml_path: Path, long_mol: Chem.Mol, long_pdb: Path) -> tuple[Path, Path, Path]:
+    def _parameterize_long_chain(self, xml_path: Path, long_mol: Chem.Mol, long_pdb: Path) -> Tuple[Path, Path, Path]:
         artifacts = self.project.artifacts
         artifacts.md_dir.mkdir(parents=True, exist_ok=True)
         try:

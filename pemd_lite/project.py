@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 from .errors import ProjectValidationError
 
@@ -32,7 +32,7 @@ class SmallMoleculeSpec:
     scale: float
     numbers: int = 0
     ff_source: str = "database"
-    smiles: str | None = None
+    smiles: Optional[str] = None
 
 
 @dataclass
@@ -126,7 +126,7 @@ class ArtifactRegistry:
     def polymer_chain_pdb(self, length: int) -> Path:
         return self.root / f"{self.polymer_name}_build_N{length}.pdb"
 
-    def ligpargen_dir(self, name: str | None = None) -> Path:
+    def ligpargen_dir(self, name: Optional[str] = None) -> Path:
         target = name or self.polymer_name
         return self.root / f"ligpargen_{target}"
 
@@ -136,9 +136,9 @@ class Project:
     root: Path
     config_path: Path
     polymer: PolymerSpec
-    small_molecules: list[SmallMoleculeSpec] = field(default_factory=list)
+    small_molecules: List[SmallMoleculeSpec] = field(default_factory=list)
     run: RunSpec = field(default_factory=RunSpec)
-    raw_config: dict[str, Any] = field(default_factory=dict)
+    raw_config: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def artifacts(self) -> ArtifactRegistry:
@@ -159,10 +159,10 @@ class Project:
         if self.polymer.optimize_every_n_steps < 1:
             raise ProjectValidationError("optimize_every_n_steps must be >= 1")
 
-    def molecule_specs(self) -> list[SmallMoleculeSpec]:
+    def molecule_specs(self) -> List[SmallMoleculeSpec]:
         return list(self.small_molecules)
 
-    def existing_chain_paths(self) -> dict[str, Path]:
+    def existing_chain_paths(self) -> Dict[str, Path]:
         short_path = self.artifacts.polymer_chain_pdb(self.polymer.length_short)
         long_path = self.artifacts.polymer_chain_pdb(self.polymer.length_long)
         return {
@@ -171,8 +171,8 @@ class Project:
         }
 
 
-def _load_small_molecules(data: dict[str, Any]) -> list[SmallMoleculeSpec]:
-    out: list[SmallMoleculeSpec] = []
+def _load_small_molecules(data: Dict[str, Any]) -> List[SmallMoleculeSpec]:
+    out: List[SmallMoleculeSpec] = []
     for key, value in data.items():
         if key == "polymer" or not isinstance(value, dict):
             continue
@@ -193,7 +193,7 @@ def _load_small_molecules(data: dict[str, Any]) -> list[SmallMoleculeSpec]:
     return out
 
 
-def load(path: str | Path) -> Project:
+def load(path: Union[str, Path]) -> Project:
     input_path = Path(path).resolve()
     if input_path.is_dir():
         config_path = input_path / "md.json"

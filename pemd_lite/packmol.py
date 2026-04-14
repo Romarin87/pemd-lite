@@ -7,13 +7,14 @@ import logging
 from collections import defaultdict
 from pathlib import Path
 from shutil import which
+from typing import Dict, Union
 
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 
 logger = logging.getLogger(__name__)
 
-def calc_mol_weight(pdb_file: str | Path) -> float:
+def calc_mol_weight(pdb_file: Union[str, Path]) -> float:
     pdb_file = str(pdb_file)
     try:
         mol = Chem.MolFromPDBFile(pdb_file, removeHs=False, sanitize=False)
@@ -22,7 +23,7 @@ def calc_mol_weight(pdb_file: str | Path) -> float:
             return float(Descriptors.MolWt(mol))
         raise ValueError(f"RDKit failed to parse PDB file: {pdb_file}")
     except Exception:
-        atom_counts: dict[str, int] = defaultdict(int)
+        atom_counts: Dict[str, int] = defaultdict(int)
         with open(pdb_file, "r", encoding="utf-8") as handle:
             for line in handle:
                 if line.startswith(("ATOM", "HETATM")):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional, Union
 from typing_extensions import Literal
 
 from .project import Project, load
@@ -12,12 +13,12 @@ StageName = Literal["build_polymer", "generate_forcefield", "relax_chain", "pack
 
 @dataclass
 class PipelineResult:
-    polymer: PolymerBuildResult | None = None
-    forcefield: object | None = None
-    relax: object | None = None
-    box: object | None = None
-    pack: object | None = None
-    md: object | None = None
+    polymer: Optional[PolymerBuildResult] = None
+    forcefield: Optional[object] = None
+    relax: Optional[object] = None
+    box: Optional[object] = None
+    pack: Optional[object] = None
+    md: Optional[object] = None
 
 
 class Pipeline:
@@ -69,11 +70,11 @@ class Pipeline:
         return result
 
 
-def run_until(project: Project | str, stage: StageName) -> PipelineResult:
+def run_until(project: Union[Project, str], stage: StageName) -> PipelineResult:
     if not isinstance(project, Project):
         project = load(project)
     return Pipeline(project).run_until(stage)
 
 
-def run_polymer_pack_md(project: Project | str) -> PipelineResult:
+def run_polymer_pack_md(project: Union[Project, str]) -> PipelineResult:
     return run_until(project, "run_md")

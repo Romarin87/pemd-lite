@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional, Union
 
 import MDAnalysis as mda
 from openbabel import openbabel as ob
@@ -36,13 +37,13 @@ def smile_toxyz(name: str, smiles: str, out_dir: str = ".") -> str:
     return rdkitmol2xyz(name, mol, out_dir, conf_id=-1)
 
 
-def convert_gro_to_pdb(input_gro: str | Path, output_pdb: str | Path) -> None:
+def convert_gro_to_pdb(input_gro: Union[str, Path], output_pdb: Union[str, Path]) -> None:
     universe = mda.Universe(str(input_gro))
     with mda.Writer(str(output_pdb)) as writer:
         writer.write(universe.atoms)
 
 
-def convert_rdkit_mol_to_mol2(mol: Chem.Mol, output_mol2: str | Path, *, conf_id: int = 0) -> Path:
+def convert_rdkit_mol_to_mol2(mol: Chem.Mol, output_mol2: Union[str, Path], *, conf_id: int = 0) -> Path:
     output_path = Path(output_mol2)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     mol_path = output_path.with_suffix(".mol")
@@ -59,8 +60,8 @@ def convert_rdkit_mol_to_mol2(mol: Chem.Mol, output_mol2: str | Path, *, conf_id
 
 
 def extract_from_top(
-    top_file: str | Path,
-    out_itp_file: str | Path,
+    top_file: Union[str, Path],
+    out_itp_file: Union[str, Path],
     *,
     nonbonded: bool = False,
     bonded: bool = False,
@@ -81,7 +82,7 @@ def extract_from_top(
 
     lines = Path(top_file).read_text(encoding="utf-8").splitlines(keepends=True)
     extracted: list[str] = []
-    current_section: str | None = None
+    current_section: Optional[str] = None
 
     for line in lines:
         stripped = line.strip()

@@ -25,17 +25,24 @@ This document records the deployed PEMD-Lite runtime that was verified on `2026-
 - `MDAnalysis==2.1.0`
 - `ParmEd==3.4.3`
 - `networkx==2.7`
+- `foyer==0.11.2`
 - `openbabel==3.1.1`
 - `packmol==21.2.1`
-- `gromacs==2023.4`
 - `cudatoolkit==11.8.0`
 
-### Command-line tools exposed from the environment
+### Command-line tools exposed from the conda environment
 
-- `gmx` -> GROMACS `2023.4-conda_forge`
 - `obabel` -> reports `Open Babel 3.1.0`
 - `packmol` -> available from the conda environment binary directory
 - `ligpargen` -> `LigPargen 2.1`
+
+### External tools outside the conda environment
+
+- GROMACS executable used for successful PEMD-Lite runs:
+  `/root/shared-nvme/soft/gromacs-2026.1/bin/gmx_mpi`
+- Verified GROMACS version: `2026.1`
+- Recommended runtime export:
+  `PEMD_GMX_EXEC=/root/shared-nvme/soft/gromacs-2026.1/bin/gmx_mpi`
 
 ## LigParGen Installation
 
@@ -69,9 +76,9 @@ conda create -p /path/to/conda_envs/pemd_lite -c conda-forge \
   mdanalysis=2.1.0 \
   parmed=3.4.3 \
   networkx=2.7 \
+  foyer=0.11.2 \
   openbabel=3.1.1 \
   packmol=21.2.1 \
-  gromacs=2023.4 \
   cudatoolkit=11.8.0
 ```
 
@@ -84,6 +91,12 @@ git checkout v2.1
 pip install .
 ```
 
+GROMACS should be provided separately from an external installation rather than from this conda environment:
+
+```bash
+export PEMD_GMX_EXEC=/path/to/gromacs/bin/gmx_mpi
+```
+
 ## Compatibility Note
 
-The currently verified deployed environment is Python `3.7.12`. If repository code is updated to rely on newer Python syntax or dependency versions, keep this document in sync and treat that as a new environment target rather than assuming compatibility with the deployed stack above.
+The repository target runtime is Python `3.7.12`. Code and packaging metadata should stay aligned to this exact interpreter version unless the environment target is intentionally changed.
