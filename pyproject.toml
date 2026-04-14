@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pemd-lite"
+version = "0.1.0"
+description = "Workflow-focused polymer build, forcefield generation, packing, and GROMACS pipeline utilities."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "PEMD-Lite contributors" }
+]
+keywords = ["polymer", "molecular-dynamics", "gromacs", "forcefield", "chemistry"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Topic :: Scientific/Engineering :: Chemistry",
+]
+dependencies = [
+  "numpy",
+  "pandas",
+  "scipy",
+  "rdkit",
+  "MDAnalysis",
+  "ParmEd",
+  "networkx",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["pemd_lite", "pemd_lite.*"]
+
+[tool.setuptools.package-data]
+pemd_lite = [
+  "resources/forcefields/itp/*.itp",
+  "resources/forcefields/pdb/*.pdb",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
