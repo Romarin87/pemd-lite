@@ -22,15 +22,18 @@ class RelaxOptions:
     box_mode: Optional[Union[float, str]] = "editconf"
     dt_ps: float = 0.001
     tau_t_ps: float = 1.0
+    nvt_tau_t_ps: Optional[float] = None
     tau_p_ps: float = 1.0
     run_em: bool = True
     run_npt: bool = True
     run_nvt: bool = True
     npt_steps: int = 200000
     nvt_steps: int = 200000
-    em_output: str = "polymer_relax_em"
-    npt_output: str = "polymer_relax_npt"
-    nvt_output: str = "polymer_relax_nvt"
+    nvt_gen_vel: bool = False
+    em_output: Optional[str] = None
+    npt_output: Optional[str] = None
+    nvt_output: Optional[str] = None
+    stage_order: Optional[List[str]] = None
 
 
 @dataclass
@@ -50,6 +53,21 @@ class BoxEstimate:
 class BoxEstimator:
     @staticmethod
     def _coords_from_pdb(pdb_path: Path) -> np.ndarray:
+        coords = []
+        with pdb_path.open() as handle:
+            for line in handle:
+                if not (line.startswith("ATOM") or line.startswith("HETATM")):
+                    continue
+                try:
+                    x = float(line[30:38])
+                    y = float(line[38:46])
+                    z = float(line[46:54])
+                except ValueError:
+                    continue
+                coords.append((x, y, z))
+        if coords:
+            return np.array(coords, dtype=float)
+
         mol = Chem.MolFromPDBFile(str(pdb_path), removeHs=False)
         if mol is None or mol.GetNumConformers() == 0:
             raise ValueError(f"Could not read coordinates from {pdb_path}")
@@ -77,6 +95,8 @@ class BoxEstimator:
 
 
 class RelaxRunner:
+    _STAGE_DEFAULT_ORDER = ("em", "npt", "nvt")
+
     def __init__(self, project: Project):
         self.project = project
 
@@ -96,6 +116,9 @@ class RelaxRunner:
         )
         gmx.gen_top_file(top_filename=self.project.artifacts.relax_topology.name)
         return gmx
+
+    def _default_stage_output(self, stage: str) -> str:
+        return "{name}_relax_{stage}".format(name=self.project.polymer.name, stage=stage)
 
     @staticmethod
     def _resolve_box_mode(opts: RelaxOptions) -> Tuple[Optional[float], bool, Optional[float]]:
@@ -119,12 +142,38 @@ class RelaxRunner:
                 ) from exc
         return None, True, 1.2
 
+    @classmethod
+    def _effective_stage_order(cls, opts: RelaxOptions) -> List[str]:
+        requested = list(opts.stage_order) if opts.stage_order is not None else list(cls._STAGE_DEFAULT_ORDER)
+        allowed = set(cls._STAGE_DEFAULT_ORDER)
+        seen = set()
+        ordered: List[str] = []
+        enabled = {
+            "em": opts.run_em,
+            "npt": opts.run_npt,
+            "nvt": opts.run_nvt,
+        }
+        for stage in requested:
+            if stage not in allowed:
+                raise ValueError(
+                    "Unsupported relax stage in stage_order: {!r}. Allowed values are: {}.".format(
+                        stage, ", ".join(cls._STAGE_DEFAULT_ORDER)
+                    )
+                )
+            if stage in seen:
+                raise ValueError(f"Duplicate relax stage in stage_order: {stage!r}")
+            seen.add(stage)
+            if enabled[stage]:
+                ordered.append(stage)
+        return ordered
+
     def run(self, pdb_file: Path, options: Optional[RelaxOptions] = None) -> RelaxResult:
         opts = options or RelaxOptions(temperature=self.project.run.relax_temperature)
         gmx = self._prepare_gmx()
         box_length_nm, center_molecule, box_distance_nm = self._resolve_box_mode(opts)
+        stage_order = self._effective_stage_order(opts)
         logger.info(
-            "Starting relax: pdb=%s temperature=%s pressure=%s dt_ps=%s tau_t_ps=%s tau_p_ps=%s box_mode=%s resolved_box_length=%s center=%s distance=%s run_em=%s run_npt=%s run_nvt=%s",
+            "Starting relax: pdb=%s temperature=%s pressure=%s dt_ps=%s tau_t_ps=%s tau_p_ps=%s box_mode=%s resolved_box_length=%s center=%s distance=%s run_em=%s run_npt=%s run_nvt=%s stage_order=%s",
             pdb_file,
             opts.temperature,
             opts.pressure,
@@ -138,6 +187,7 @@ class RelaxRunner:
             opts.run_em,
             opts.run_npt,
             opts.run_nvt,
+            stage_order,
         )
 
         conf_name = f"{self.project.polymer.name}_relax_conf.gro"
@@ -151,43 +201,39 @@ class RelaxRunner:
         completed: List[str] = ["pdb_to_gro"]
         current_gro = conf_name
 
-        if opts.run_em:
-            em_output = opts.em_output
-            gmx.gen_em_mdp_file(filename=f"{em_output}.mdp")
-            gmx.commands_em(input_gro=current_gro, output_str=em_output).run_local()
-            current_gro = f"{em_output}.gro"
-            completed.append("em")
-            logger.info("Relax stage completed: em -> %s", current_gro)
-
-        if opts.run_npt:
-            npt_output = opts.npt_output
-            gmx.gen_npt_mdp_file(
-                filename=f"{npt_output}.mdp",
-                nsteps_npt=opts.npt_steps,
-                pression=opts.pressure,
-                temperature=opts.temperature,
-                dt_ps=opts.dt_ps,
-                tau_t_ps=opts.tau_t_ps,
-                tau_p_ps=opts.tau_p_ps,
-            )
-            gmx.commands_npt(input_gro=current_gro, output_str=npt_output).run_local()
-            current_gro = f"{npt_output}.gro"
-            completed.append("npt")
-            logger.info("Relax stage completed: npt -> %s", current_gro)
-
-        if opts.run_nvt:
-            nvt_output = opts.nvt_output
-            gmx.gen_nvt_mdp_file(
-                filename=f"{nvt_output}.mdp",
-                nsteps_nvt=opts.nvt_steps,
-                temperature=opts.temperature,
-                dt_ps=opts.dt_ps,
-                tau_t_ps=opts.tau_t_ps,
-            )
-            gmx.commands_nvt(input_gro=current_gro, output_str=nvt_output).run_local()
-            current_gro = f"{nvt_output}.gro"
-            completed.append("nvt")
-            logger.info("Relax stage completed: nvt -> %s", current_gro)
+        for stage in stage_order:
+            if stage == "em":
+                em_output = opts.em_output or self._default_stage_output("em")
+                gmx.gen_em_mdp_file(filename=f"{em_output}.mdp")
+                gmx.commands_em(input_gro=current_gro, output_str=em_output).run_local()
+                current_gro = f"{em_output}.gro"
+            elif stage == "npt":
+                npt_output = opts.npt_output or self._default_stage_output("npt")
+                gmx.gen_npt_mdp_file(
+                    filename=f"{npt_output}.mdp",
+                    nsteps_npt=opts.npt_steps,
+                    pression=opts.pressure,
+                    temperature=opts.temperature,
+                    dt_ps=opts.dt_ps,
+                    tau_t_ps=opts.tau_t_ps,
+                    tau_p_ps=opts.tau_p_ps,
+                )
+                gmx.commands_npt(input_gro=current_gro, output_str=npt_output).run_local()
+                current_gro = f"{npt_output}.gro"
+            else:
+                nvt_output = opts.nvt_output or self._default_stage_output("nvt")
+                gmx.gen_nvt_mdp_file(
+                    filename=f"{nvt_output}.mdp",
+                    nsteps_nvt=opts.nvt_steps,
+                    temperature=opts.temperature,
+                    dt_ps=opts.dt_ps,
+                    tau_t_ps=opts.nvt_tau_t_ps if opts.nvt_tau_t_ps is not None else opts.tau_t_ps,
+                    gen_vel=opts.nvt_gen_vel,
+                )
+                gmx.commands_nvt(input_gro=current_gro, output_str=nvt_output).run_local()
+                current_gro = f"{nvt_output}.gro"
+            completed.append(stage)
+            logger.info("Relax stage completed: %s -> %s", stage, current_gro)
 
         gmx.commands_grotopdb(gro_filename=current_gro, pdb_filename=self.project.artifacts.relaxed_pdb.name).run_local()
         logger.info("Relax completed: relaxed_pdb=%s completed_stages=%s", self.project.artifacts.relaxed_pdb, completed)

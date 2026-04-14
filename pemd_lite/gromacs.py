@@ -137,6 +137,7 @@ class PEMDGROMACS:
         temperature: Optional[float] = None,
         dt_ps: float = 0.001,
         tau_t_ps: float = 1.0,
+        gen_vel: bool = False,
     ):
         ref_t = self.temperature if temperature is None else temperature
         filepath = os.path.join(self.work_dir, filename)
@@ -152,7 +153,11 @@ class PEMDGROMACS:
         contents += "; OPTIONS FOR WEAK COUPLING ALGORITHMS\ntcoupl                = v-rescale\ntc-grps               = System\n"
         contents += f"tau_t                 = {tau_t_ps}\nref_t                 = {ref_t}\nPcoupl                = no\nPcoupltype            = isotropic\n"
         contents += "tau_p                 = 1.0\ncompressibility       = 4.5e-5\nref_p                 = 1.0\n\n"
-        contents += "; GENERATE VELOCITIES FOR STARTUP RUN\ngen_vel               = no\n\n"
+        contents += "; GENERATE VELOCITIES FOR STARTUP RUN\n"
+        if gen_vel:
+            contents += f"gen_vel               = yes\ngen_temp              = {ref_t}\ngen_seed              = -1\n\n"
+        else:
+            contents += "gen_vel               = no\n\n"
         contents += "; OPTIONS FOR BONDS\nconstraints           = hbonds\nconstraint_algorithm  = lincs\nunconstrained_start   = no\n"
         contents += "shake_tol             = 0.00001\nlincs_order           = 4\nlincs_warnangle       = 30\nmorse                 = no\nlincs_iter            = 2\n"
         with open(filepath, "w", encoding="utf-8") as handle:

@@ -20,7 +20,7 @@ class PolymerSpec:
     numbers: int
     charge: float
     scale: float
-    optimize_every_n_steps: int = 2
+    optimize_every_n_steps: int = 1
 
 
 @dataclass
@@ -228,7 +228,7 @@ def load(path: Union[str, Path]) -> Project:
             numbers=int(polymer_data.get("numbers", 1)),
             charge=float(polymer_data.get("charge", 0.0)),
             scale=float(polymer_data.get("scale", 1.0)),
-            optimize_every_n_steps=int(run_data.get("optimize_every_n_steps", 2)),
+            optimize_every_n_steps=int(run_data.get("optimize_every_n_steps", 1)),
         ),
         small_molecules=_load_small_molecules(data),
         run=RunSpec(

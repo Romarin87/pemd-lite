@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PolymerBuildOptions:
-    optimize_every_n_steps: int = 2
+    optimize_every_n_steps: int = 1
     resume: bool = True
     force_rebuild_short_chain: bool = False
     force_rebuild_long_chain: bool = False

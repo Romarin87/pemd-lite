@@ -18,7 +18,7 @@ MDStageName = Literal["pdb_to_gro", "em", "nvt", "npt", "production"]
 @dataclass
 class MDStep:
     stage: MDStageName
-    output: str
+    output: Optional[str] = None
     input_gro: Optional[str] = None
     input_pdb: Optional[str] = None
     steps: Optional[int] = None
@@ -46,17 +46,17 @@ class MDFlow:
         self.initial_pdb = initial_pdb
         self.steps: List[MDStep] = []
 
-    def pdb_to_gro(self, input_pdb: Optional[str] = None) -> MDFlow:
+    def pdb_to_gro(self, input_pdb: Optional[str] = None, output: Optional[str] = None) -> MDFlow:
         self.steps.append(
             MDStep(
                 stage="pdb_to_gro",
                 input_pdb=input_pdb or self.initial_pdb,
-                output="boxmd_conf.gro",
+                output=output,
             )
         )
         return self
 
-    def em(self, *, input_gro: Optional[str] = None, output: str = "em") -> MDFlow:
+    def em(self, *, input_gro: Optional[str] = None, output: Optional[str] = None) -> MDFlow:
         self.steps.append(MDStep(stage="em", input_gro=input_gro, output=output))
         return self
 
@@ -64,7 +64,7 @@ class MDFlow:
         self,
         *,
         input_gro: Optional[str] = None,
-        output: str = "nvt",
+        output: Optional[str] = None,
         steps: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> MDFlow:
@@ -83,7 +83,7 @@ class MDFlow:
         self,
         *,
         input_gro: Optional[str] = None,
-        output: str = "npt",
+        output: Optional[str] = None,
         steps: Optional[int] = None,
         temperature: Optional[float] = None,
         pressure: Optional[float] = None,
@@ -104,7 +104,7 @@ class MDFlow:
         self,
         *,
         input_gro: Optional[str] = None,
-        output: str = "production",
+        output: Optional[str] = None,
         steps: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> MDFlow:
@@ -150,6 +150,11 @@ class GromacsRunner:
         gmx.gen_top_file(top_filename=self.project.artifacts.topology.name)
         return gmx
 
+    def _default_stage_output(self, stage: MDStageName) -> str:
+        if stage == "pdb_to_gro":
+            return "{name}_boxmd_conf.gro".format(name=self.project.polymer.name)
+        return "{name}_boxmd_{stage}".format(name=self.project.polymer.name, stage=stage)
+
     def build_flow(self, packmol_pdb: Optional[str] = None) -> MDFlow:
         return MDFlow(self, initial_pdb=packmol_pdb or self.project.artifacts.pack_pdb.name)
 
@@ -158,23 +163,20 @@ class GromacsRunner:
         flow = self.build_flow(initial_pdb)
         flow.pdb_to_gro(initial_pdb)
         if self.project.run.md_enable_em:
-            flow.em(output="boxmd_em")
+            flow.em()
         if self.project.run.md_enable_nvt:
             flow.nvt(
-                output="boxmd_nvt",
                 steps=self.project.run.md_nvt_steps,
                 temperature=self.project.run.production_temperature,
             )
         if self.project.run.md_enable_npt:
             flow.npt(
-                output="boxmd_npt",
                 steps=self.project.run.md_npt_steps,
                 temperature=self.project.run.production_temperature,
                 pressure=self.project.run.production_pressure,
             )
         if self.project.run.md_enable_production:
             flow.production(
-                output="boxmd_production",
                 steps=self.project.run.md_production_steps,
                 temperature=self.project.run.production_temperature,
             )
@@ -198,56 +200,57 @@ class GromacsRunner:
 
         for step in flow.steps:
             input_file = self._infer_input(step, previous_output)
+            step_output = step.output or self._default_stage_output(step.stage)
             logger.info(
                 "Running MD step: stage=%s input=%s output=%s steps=%s temperature=%s pressure=%s",
                 step.stage,
                 input_file,
-                step.output,
+                step_output,
                 step.steps,
                 step.temperature,
                 step.pressure,
             )
 
             if step.stage == "pdb_to_gro":
-                gmx.commands_pdbtogro(input_file, output_gro=step.output).run_local()
-                output_file = step.output
+                gmx.commands_pdbtogro(input_file, output_gro=step_output).run_local()
+                output_file = step_output
 
             elif step.stage == "em":
-                mdp_name = f"{step.output}.mdp"
+                mdp_name = f"{step_output}.mdp"
                 gmx.gen_em_mdp_file(mdp_name)
-                gmx.commands_em(input_gro=input_file, output_str=step.output).run_local()
-                output_file = f"{step.output}.gro"
+                gmx.commands_em(input_gro=input_file, output_str=step_output).run_local()
+                output_file = f"{step_output}.gro"
 
             elif step.stage == "nvt":
-                mdp_name = f"{step.output}.mdp"
+                mdp_name = f"{step_output}.mdp"
                 gmx.gen_nvt_mdp_file(
                     nsteps_nvt=step.steps or self.project.run.md_nvt_steps,
                     filename=mdp_name,
                     temperature=step.temperature if step.temperature is not None else self.project.run.production_temperature,
                 )
-                gmx.commands_nvt(input_gro=input_file, output_str=step.output).run_local()
-                output_file = f"{step.output}.gro"
+                gmx.commands_nvt(input_gro=input_file, output_str=step_output).run_local()
+                output_file = f"{step_output}.gro"
 
             elif step.stage == "npt":
-                mdp_name = f"{step.output}.mdp"
+                mdp_name = f"{step_output}.mdp"
                 gmx.gen_npt_mdp_file(
                     filename=mdp_name,
                     nsteps_npt=step.steps or self.project.run.md_npt_steps,
                     pression=step.pressure if step.pressure is not None else self.project.run.production_pressure,
                     temperature=step.temperature if step.temperature is not None else self.project.run.production_temperature,
                 )
-                gmx.commands_npt(input_gro=input_file, output_str=step.output).run_local()
-                output_file = f"{step.output}.gro"
+                gmx.commands_npt(input_gro=input_file, output_str=step_output).run_local()
+                output_file = f"{step_output}.gro"
 
             elif step.stage == "production":
-                mdp_name = f"{step.output}.mdp"
+                mdp_name = f"{step_output}.mdp"
                 gmx.gen_nvt_mdp_file(
                     nsteps_nvt=step.steps or self.project.run.md_production_steps,
                     filename=mdp_name,
                     temperature=step.temperature if step.temperature is not None else self.project.run.production_temperature,
                 )
-                gmx.commands_nvt_product(input_gro=input_file, output_str=step.output).run_local()
-                output_file = f"{step.output}.gro"
+                gmx.commands_nvt_product(input_gro=input_file, output_str=step_output).run_local()
+                output_file = f"{step_output}.gro"
 
             else:
                 raise ValueError(f"Unsupported MD stage: {step.stage}")

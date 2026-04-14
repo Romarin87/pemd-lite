@@ -61,10 +61,11 @@ if RUN_BUILD_POLYMER:
     # 1. BUILD_RESUME = True 时，已有链文件会直接复用
     # 2. FORCE_REBUILD_* = True 时，只强制重建对应那一根链
     # 3. OPTIMIZE_EVERY_N_STEPS 控制长链增长时每几步做一次 MMFF
+    #    标准脚本默认每一步都做一次 MMFF。
     BUILD_RESUME = True
     FORCE_REBUILD_SHORT_CHAIN = False
     FORCE_REBUILD_LONG_CHAIN = False
-    OPTIMIZE_EVERY_N_STEPS = project.polymer.optimize_every_n_steps   # 默认 2
+    OPTIMIZE_EVERY_N_STEPS = 1
 
     polymer = PolymerBuilder(
         project,
@@ -152,25 +153,33 @@ if RUN_RELAX_CHAIN:
     RELAX_RUN_EM = True
     RELAX_RUN_NPT = True
     RELAX_RUN_NVT = False
+    RELAX_STAGE_ORDER = ["em", "npt", "nvt"]
     RELAX_NPT_STEPS = 200000                           # 默认 200000 steps = 200 ps
     RELAX_NVT_STEPS = 200000                           # 默认 200000 steps = 200 ps
+    RELAX_NVT_TAU_T_PS = 1.0
+    RELAX_NVT_GEN_VEL = False
 
     require_stage_output(
-        "polymer",
-        polymer,
-        "Set RUN_BUILD_POLYMER = True. Relax needs the long-chain PDB from the build section.",
+        "forcefield",
+        forcefield,
+        "Set RUN_POLYMER_FORCEFIELD = True. Relax uses the parameterized polymer GRO from the forcefield section.",
     )
     relax = RelaxRunner(project).run(
-        polymer.long_pdb,
+        forcefield.polymer_gro,
         options=RelaxOptions(
             temperature=RELAX_TEMPERATURE,
             pressure=RELAX_NPT_PRESSURE,
             box_mode=RELAX_BOX,
+            dt_ps=0.0005,
+            tau_p_ps=10.0,
             run_em=RELAX_RUN_EM,
             run_npt=RELAX_RUN_NPT,
             run_nvt=RELAX_RUN_NVT,
+            stage_order=RELAX_STAGE_ORDER,
             npt_steps=RELAX_NPT_STEPS,
             nvt_steps=RELAX_NVT_STEPS,
+            nvt_tau_t_ps=RELAX_NVT_TAU_T_PS,
+            nvt_gen_vel=RELAX_NVT_GEN_VEL,
         ),
     )
     logger.info("Relax section completed.")
@@ -225,7 +234,7 @@ if RUN_PACK_CELL:
 # - 每一步默认自动接上一步输出
 #
 # 例如默认：
-# poly_x_pack_cell.pdb -> boxmd_conf.gro -> boxmd_em.gro -> boxmd_nvt.gro -> boxmd_npt.gro
+# poly_x_pack_cell.pdb -> poly_x_boxmd_conf.gro -> poly_x_boxmd_em.gro -> poly_x_boxmd_nvt.gro -> poly_x_boxmd_npt.gro
 #
 # 如果你想改顺序，例如先 NPT 再 EM，也可以直接改：
 # gmx.build_flow(...).pdb_to_gro().npt(...).em(...).run()
@@ -233,17 +242,14 @@ if RUN_PACK_CELL:
 
 md = None
 if RUN_BOX_MD:
-    # 盒子 MD 参数：
-    # 顺序、是否执行、步数、输出文件名，都在这里改。
+# 盒子 MD 参数：
+# 顺序、是否执行、步数，都在这里改。
+# 输出文件名前缀默认自动命名为：
+# {polymer_name}_boxmd_em / {polymer_name}_boxmd_nvt / {polymer_name}_boxmd_npt / {polymer_name}_boxmd_production
     RUN_EM = True
     RUN_NVT = True
     RUN_NPT = True
     RUN_PRODUCTION = False
-
-    EM_OUTPUT = "boxmd_em"
-    NVT_OUTPUT = "boxmd_nvt"
-    NPT_OUTPUT = "boxmd_npt"
-    PRODUCTION_OUTPUT = "boxmd_production"
 
     NVT_STEPS = 200000              # 默认 200000 steps = 200 ps
     NPT_STEPS = 200000              # 默认 200000 steps = 200 ps
@@ -264,18 +270,16 @@ if RUN_BOX_MD:
     flow = gmx.build_flow(pack.pack_pdb.name).pdb_to_gro()
 
     if RUN_EM:
-        flow = flow.em(output=EM_OUTPUT)
+        flow = flow.em()
 
     if RUN_NVT:
         flow = flow.nvt(
-            output=NVT_OUTPUT,
             steps=NVT_STEPS,
             temperature=NVT_TEMPERATURE,
         )
 
     if RUN_NPT:
         flow = flow.npt(
-            output=NPT_OUTPUT,
             steps=NPT_STEPS,
             temperature=NPT_TEMPERATURE,
             pressure=NPT_PRESSURE,
@@ -283,7 +287,6 @@ if RUN_BOX_MD:
 
     if RUN_PRODUCTION:
         flow = flow.production(
-            output=PRODUCTION_OUTPUT,
             steps=PRODUCTION_STEPS,
             temperature=PRODUCTION_TEMPERATURE,
         )
