@@ -142,8 +142,8 @@ relax = None
 if RUN_RELAX_CHAIN:
     # 单链驰豫参数：
     # 这里控制的是单链 relax，不是盒子里的正式 MD。
-    RELAX_TEMPERATURE = project.run.relax_temperature   # 默认 1000 K
-    RELAX_NPT_PRESSURE = 1.0                            # 默认 1.0 bar
+    RELAX_TEMPERATURE = 500   # 默认 1000 K
+    RELAX_DT_PS = 0.0005
     # 盒子写法支持三种：
     # 1. 浮点数：固定盒子边长（单位 nm），例如 6.0
     # 2. "editconf"：等价于 gmx editconf -c -d 1.2
@@ -153,11 +153,23 @@ if RUN_RELAX_CHAIN:
     RELAX_RUN_EM = True
     RELAX_RUN_NPT = True
     RELAX_RUN_NVT = False
-    RELAX_STAGE_ORDER = ["em", "npt", "nvt"]
-    RELAX_NPT_STEPS = 200000                           # 默认 200000 steps = 200 ps
-    RELAX_NVT_STEPS = 200000                           # 默认 200000 steps = 200 ps
+    RELAX_STAGE_ORDER = ["em", "npt"]
+
+    # EM 阶段参数
+    RELAX_EM_OUTPUT = None
+
+    # NPT 阶段参数
+    RELAX_NPT_PRESSURE = 1.0                           # 默认 1.0 bar
+    RELAX_NPT_STEPS = 200000                           # 默认 200000 steps = 100 ps
+    RELAX_NPT_TAU_T_PS = 1.0
+    RELAX_NPT_TAU_P_PS = 10.0
+    RELAX_NPT_OUTPUT = None
+
+    # NVT 阶段参数
+    RELAX_NVT_STEPS = 200000                           # 默认 200000 steps = 100 ps
     RELAX_NVT_TAU_T_PS = 1.0
     RELAX_NVT_GEN_VEL = False
+    RELAX_NVT_OUTPUT = None
 
     require_stage_output(
         "forcefield",
@@ -170,8 +182,9 @@ if RUN_RELAX_CHAIN:
             temperature=RELAX_TEMPERATURE,
             pressure=RELAX_NPT_PRESSURE,
             box_mode=RELAX_BOX,
-            dt_ps=0.0005,
-            tau_p_ps=10.0,
+            dt_ps=RELAX_DT_PS,
+            tau_t_ps=RELAX_NPT_TAU_T_PS,
+            tau_p_ps=RELAX_NPT_TAU_P_PS,
             run_em=RELAX_RUN_EM,
             run_npt=RELAX_RUN_NPT,
             run_nvt=RELAX_RUN_NVT,
@@ -180,6 +193,9 @@ if RUN_RELAX_CHAIN:
             nvt_steps=RELAX_NVT_STEPS,
             nvt_tau_t_ps=RELAX_NVT_TAU_T_PS,
             nvt_gen_vel=RELAX_NVT_GEN_VEL,
+            em_output=RELAX_EM_OUTPUT,
+            npt_output=RELAX_NPT_OUTPUT,
+            nvt_output=RELAX_NVT_OUTPUT,
         ),
     )
     logger.info("Relax section completed.")
