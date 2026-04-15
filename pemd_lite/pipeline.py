@@ -50,6 +50,10 @@ class Pipeline:
         from .relax import BoxEstimator, RelaxRunner
         from .pack import PackBuilder
 
+        # 注意：
+        # 这里目前直接使用 RelaxRunner 的底层默认 RelaxOptions，
+        # 可能与 workflow/md.py 里声明的正式脚本参数不一致。
+        # 如果后续希望 Pipeline 与脚本工作流完全对齐，建议把 relax 配置做成共享入口，而不是各自维护。
         result.relax = RelaxRunner(self.project).run(result.forcefield.polymer_gro)
         if stage == "relax_chain":
             return result

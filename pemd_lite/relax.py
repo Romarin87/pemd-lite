@@ -165,6 +165,13 @@ class RelaxRunner:
             seen.add(stage)
             if enabled[stage]:
                 ordered.append(stage)
+        missing_enabled = [stage for stage in cls._STAGE_DEFAULT_ORDER if enabled[stage] and stage not in seen]
+        if missing_enabled:
+            logger.warning(
+                "Relax stages enabled but omitted from stage_order; they will be skipped: %s. stage_order=%s",
+                missing_enabled,
+                requested,
+            )
         return ordered
 
     def run(self, pdb_file: Path, options: Optional[RelaxOptions] = None) -> RelaxResult:

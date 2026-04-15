@@ -43,6 +43,7 @@ This document records the deployed PEMD-Lite runtime that was verified on `2026-
 - Verified GROMACS version: `2026.1`
 - Recommended runtime export:
   `PEMD_GMX_EXEC=/root/shared-nvme/soft/gromacs-2026.1/bin/gmx_mpi`
+- PEMD-Lite also supports a second verified deployment mode where GROMACS is installed directly into the conda environment and invoked as `gmx` from the environment `bin` directory
 
 ## LigParGen Installation
 
@@ -91,11 +92,21 @@ git checkout v2.1
 pip install .
 ```
 
-GROMACS should be provided separately from an external installation rather than from this conda environment:
+GROMACS can be deployed in either of these verified ways:
+
+1. External standalone installation, selected explicitly with `PEMD_GMX_EXEC`:
 
 ```bash
 export PEMD_GMX_EXEC=/path/to/gromacs/bin/gmx_mpi
 ```
+
+2. Conda-environment installation, where `gmx` is available from the active environment:
+
+```bash
+conda install -c conda-forge gromacs
+```
+
+If `PEMD_GMX_EXEC` is unset, PEMD-Lite will resolve `gmx_mpi` or `gmx` from `PATH`.
 
 ## Compatibility Note
 

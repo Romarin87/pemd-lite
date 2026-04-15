@@ -47,17 +47,23 @@ Required external tools in `PATH`:
 - `ligpargen`
 - `obabel`
 - `packmol`
-- `gmx_mpi`
+- `gmx` or `gmx_mpi`
 
 Depending on your LigParGen setup, a BOSS runtime may also be required.
 
 Target Python version: `3.7.12`.
 
-The verified runtime does not keep `gromacs` inside the conda environment. Use an external GROMACS install and point PEMD-Lite at it with `PEMD_GMX_EXEC`, for example:
+GROMACS supports two verified deployment modes:
+
+1. External standalone install, recommended when you want to pin PEMD-Lite to a specific site-managed build:
 
 ```bash
 export PEMD_GMX_EXEC=/root/shared-nvme/soft/gromacs-2026.1/bin/gmx_mpi
 ```
+
+2. Conda-environment install, where `gmx` is exposed directly from the active environment `bin` directory.
+
+If `PEMD_GMX_EXEC` is not set, PEMD-Lite will fall back to resolving `gmx_mpi` or `gmx` from `PATH`.
 
 ## Quick Start
 

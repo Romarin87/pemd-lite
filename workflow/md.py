@@ -1,5 +1,6 @@
 from pathlib import Path
 import logging
+import os
 
 from pemd_lite import load
 from pemd_lite.charges import LigParGenBackend
@@ -41,6 +42,10 @@ def require_stage_output(name, value, hint):
 # GROMACS 可执行程序：
 # 推荐显式指定外部 gmx_mpi，例如：
 # export PEMD_GMX_EXEC=/root/shared-nvme/soft/gromacs-2026.1/bin/gmx_mpi
+# GROMACS 线程数：
+# 这里会写入 PEMD_GMX_NTOMP，控制底层 mdrun 的 -ntomp。
+GMX_THREADS = project.run.gmx_threads   # 默认 8
+os.environ["PEMD_GMX_NTOMP"] = str(GMX_THREADS)
 
 # 是否执行各阶段
 RUN_BUILD_POLYMER = True          # 建短链和长链
@@ -142,7 +147,11 @@ relax = None
 if RUN_RELAX_CHAIN:
     # 单链驰豫参数：
     # 这里控制的是单链 relax，不是盒子里的正式 MD。
+    # RELAX_TEMPERATURE：单链 relax 温度，单位 K。
+    # 温度高一些通常更容易把链拉开，但也更容易在早期引入不稳定。
     RELAX_TEMPERATURE = 500   # 默认 1000 K
+    # RELAX_DT_PS：积分步长，单位 ps。
+    # 越小越稳，但同样步数下对应的物理时间越短。
     RELAX_DT_PS = 0.0005
     # 盒子写法支持三种：
     # 1. 浮点数：固定盒子边长（单位 nm），例如 6.0
@@ -150,25 +159,42 @@ if RUN_RELAX_CHAIN:
     # 3. "editconf -d x.x"：手动指定边界距离，例如 "editconf -d 1.5"
     RELAX_BOX = "editconf -d 1.2"
 
+    # RELAX_RUN_*：是否允许执行对应阶段。
+    # 注意：某个阶段即使这里设成 True，也仍然需要出现在 RELAX_STAGE_ORDER 里才会实际执行。
     RELAX_RUN_EM = True
     RELAX_RUN_NPT = True
     RELAX_RUN_NVT = False
+    # RELAX_STAGE_ORDER：实际执行顺序。
+    # 常见写法有 ["em", "npt"] 或 ["em", "nvt", "npt"]。
     RELAX_STAGE_ORDER = ["em", "npt"]
 
     # EM 阶段参数
+    # RELAX_EM_OUTPUT：EM 输出文件前缀；None 表示自动命名为 {polymer_name}_relax_em。
     RELAX_EM_OUTPUT = None
 
     # NPT 阶段参数
+    # RELAX_NPT_PRESSURE：NPT 目标压力，单位 bar。
     RELAX_NPT_PRESSURE = 1.0                           # 默认 1.0 bar
+    # RELAX_NPT_STEPS：NPT 总步数。当前 dt=0.0005 ps 时，200000 steps 对应 100 ps。
     RELAX_NPT_STEPS = 200000                           # 默认 200000 steps = 100 ps
+    # RELAX_NPT_TAU_T_PS：NPT 温度耦合时间常数，单位 ps。
+    # 越小温度耦合越强，越大则更平缓。
     RELAX_NPT_TAU_T_PS = 1.0
+    # RELAX_NPT_TAU_P_PS：NPT 压力耦合时间常数，单位 ps。
+    # 越大表示压耦合更慢，通常也更稳。
     RELAX_NPT_TAU_P_PS = 10.0
+    # RELAX_NPT_OUTPUT：NPT 输出文件前缀；None 表示自动命名为 {polymer_name}_relax_npt。
     RELAX_NPT_OUTPUT = None
 
     # NVT 阶段参数
+    # RELAX_NVT_STEPS：NVT 总步数。只有在 RELAX_RUN_NVT=True 且 stage_order 包含 nvt 时才会生效。
     RELAX_NVT_STEPS = 200000                           # 默认 200000 steps = 100 ps
+    # RELAX_NVT_TAU_T_PS：NVT 温度耦合时间常数，单位 ps。
     RELAX_NVT_TAU_T_PS = 1.0
+    # RELAX_NVT_GEN_VEL：是否在 NVT 开始前重新生成速度。
+    # 常用于把 NVT 当作真正预热阶段；若前一步已经是 MD，通常保持 False。
     RELAX_NVT_GEN_VEL = False
+    # RELAX_NVT_OUTPUT：NVT 输出文件前缀；None 表示自动命名为 {polymer_name}_relax_nvt。
     RELAX_NVT_OUTPUT = None
 
     require_stage_output(
@@ -213,8 +239,13 @@ pack = None
 if RUN_PACK_CELL:
     # 盒子估算参数：
     # 默认值从 md.json 的 run 区读取；这里显式写出来方便改单体系脚本。
+    # PACK_DENSITY：packmol 建盒子时使用的目标密度，单位 g/cm^3。
     PACK_DENSITY = project.run.density            # 默认 0.3
+    # BOX_SCALE：按链尺寸估算 add_length 时的放大倍数。
+    # 若想让盒子整体更宽松，可以增大这个值。
     BOX_SCALE = project.run.add_length_scale      # 默认 1.0
+    # BOX_MIN_ADD_A：在链尺寸基础上额外增加的最小盒长，单位埃。
+    # 即使链本身很短，也至少会额外加这么多空间。
     BOX_MIN_ADD_A = project.run.add_length_min_a  # 默认 100.0 埃
 
     if relax is not None:
@@ -261,19 +292,24 @@ if RUN_PACK_CELL:
 
 md = None
 if RUN_BOX_MD:
-# 盒子 MD 参数：
-# 顺序、是否执行、步数，都在这里改。
-# 输出文件名前缀默认自动命名为：
-# {polymer_name}_boxmd_em / {polymer_name}_boxmd_nvt / {polymer_name}_boxmd_npt / {polymer_name}_boxmd_production
+    # 盒子 MD 参数：
+    # 顺序、是否执行、步数，都在这里改。
+    # 输出文件名前缀默认自动命名为：
+    # {polymer_name}_boxmd_em / {polymer_name}_boxmd_nvt / {polymer_name}_boxmd_npt / {polymer_name}_boxmd_production
+    # RUN_*：是否执行对应盒子 MD 阶段。
     RUN_EM = True
     RUN_NVT = True
     RUN_NPT = True
     RUN_PRODUCTION = False
 
+    # *_STEPS：各阶段步数。
+    # 物理时间 = 步数 x 该 mdp 中的 dt；默认 box MD 仍沿用底层 md.py 的 dt 配置。
     NVT_STEPS = 200000              # 默认 200000 steps = 200 ps
     NPT_STEPS = 200000              # 默认 200000 steps = 200 ps
     PRODUCTION_STEPS = 5000000      # 默认 5000000 steps = 5000 ps = 5 ns
 
+    # *_TEMPERATURE / NPT_PRESSURE：盒子 MD 的目标热力学条件。
+    # 默认都从 project.run 读取，便于和项目级参数保持一致。
     NVT_TEMPERATURE = project.run.production_temperature   # 默认 298 K
     NPT_TEMPERATURE = project.run.production_temperature   # 默认 298 K
     NPT_PRESSURE = project.run.production_pressure         # 默认 1.0 bar
